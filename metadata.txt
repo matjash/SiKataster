@@ -13,7 +13,7 @@ The data and web service are provided by GURS.
         Vtičnik je zasnovan na način, da v metapodatke slojev, ki jih ustvari, zapiše informacije o viru in datumu prevzema podatkov.
         Podatke in spletni servis zagotavlja GURS.
 
-version=0.3
+version=0.4
 author=Matjaž Mori
 email=matjaz.mori@gmail.com
 
@@ -27,7 +27,7 @@ repository=https://github.com/matjash/si_kataster
 
 hasProcessingProvider=no
 # Uncomment the following line and add your changelog:
-# changelog= v0.3 first release
+# changelog= v0.4 first release
 
 # Tags are comma separated with spaces allowed
 tags=python parcele kataster slovenija 
