@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/plugins/si_kataster" >
+        <file>icon.png</file>
+    </qresource>
+</RCC>
