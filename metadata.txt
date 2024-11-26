@@ -4,16 +4,15 @@
 
 [general]
 name=SiKataster
-qgisMinimumVersion=3.2
+qgisMinimumVersion=3.18
 description=EN: SiKataster is a tool for accessing cadastral parcel data from the Real Estate Cadastre of the Surveying and Mapping Authority of the Republic of Slovenia (GURS).
-The plugin is designed to record information about the source and the date of data acquisition into the metadata of the layers it creates.
-The data and web service are provided by GURS.
-         
-        SI: SiKataster ke orodje za dostop do podatkov o parcelah v Katastru nepremičnin Geodetske uprave Republike Slovenije (GURS).
+        The plugin is designed to record information about the source and the date of data acquisition into the metadata of the layers it creates.
+        The data and web service are provided by GURS.
+                
+        SI: SiKataster je orodje za dostop do podatkov o parcelah v Katastru nepremičnin Geodetske uprave Republike Slovenije (GURS).
         Vtičnik je zasnovan na način, da v metapodatke slojev, ki jih ustvari, zapiše informacije o viru in datumu prevzema podatkov.
         Podatke in spletni servis zagotavlja GURS.
-
-version=0.3
+version=0.5
 author=Matjaž Mori
 email=matjaz.mori@gmail.com
 
@@ -27,7 +26,8 @@ repository=https://github.com/matjash/si_kataster
 
 hasProcessingProvider=no
 # Uncomment the following line and add your changelog:
-# changelog= v0.3 first release
+# changelog=0.5 Optimizirano delovanje, dodane funkcije naloži KN in izbor po območju
+            0.4 first release
 
 # Tags are comma separated with spaces allowed
 tags=python parcele kataster slovenija 
@@ -47,7 +47,7 @@ deprecated=False
 # plugin_dependencies=
 
 Category of the plugin: Raster, Vector, Database or Web
-# category=Web
+# category=
 
 # If the plugin can run on QGIS Server.
 server=False

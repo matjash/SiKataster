@@ -25,8 +25,8 @@ import os
 from qgis.PyQt import QtWidgets
 from qgis.PyQt.QtCore import pyqtSignal
 from .si_kataster_search_dialog import ParcelDialog
-#from .si_kataster_presek_dialog import PresekDialog
 from .si_kataster_about_dialog import AboutDialog
+from .si_kataster_nalozi_kn_dialog import NaloziKNDialog
 
 
 class SiKatasterDockWidget(QtWidgets.QDockWidget):
@@ -42,9 +42,9 @@ class SiKatasterDockWidget(QtWidgets.QDockWidget):
         self.parcel_tab = ParcelDialog()
         self.tab_widget.addTab(self.parcel_tab, self.tr("Išči po parceli"))
 
-        #self.presek_tab = PresekDialog()
-        #self.tab_widget.addTab(self.presek_tab, self.tr("Išči po območju"))
-    
+        self.nalozi_kn_tab = NaloziKNDialog()
+        self.tab_widget.addTab(self.nalozi_kn_tab, self.tr("Naloži KN"))
+
         self.about_tab = AboutDialog()
         self.tab_widget.addTab(self.about_tab, self.tr("O vtičniku"))
 
