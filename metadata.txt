@@ -12,27 +12,28 @@ description=EN: SiKataster is a tool for accessing cadastral parcel data from th
         SI: SiKataster je orodje za dostop do podatkov o parcelah v Katastru nepremičnin Geodetske uprave Republike Slovenije (GURS).
         Vtičnik je zasnovan na način, da v metapodatke slojev, ki jih ustvari, zapiše informacije o viru in datumu prevzema podatkov.
         Podatke in spletni servis zagotavlja GURS.
-version=0.5
+version=0.6
 author=Matjaž Mori
 email=matjaz.mori@gmail.com
 
 about=Provide a brief description of the plugin and its purpose.
 
-tracker=https://github.com/matjash/SiKataster/issues
-repository=https://github.com/matjash/SiKataster
+tracker=https://github.com/matjash/si_kataster/issues
+repository=https://github.com/matjash/si_kataster
 # End of mandatory metadata
 
 # Recommended items:
 
 hasProcessingProvider=no
 # Uncomment the following line and add your changelog:
-# changelog=0.5 Optimizirano delovanje, dodane funkcije naloži KN in izbor po območju
+# changelog=0.6 Dodana funkcija izpisa iz zemljiške knjige
+            0.5 Optimizirano delovanje, dodane funkcije naloži KN in izbor po območju
             0.4 first release
 
 # Tags are comma separated with spaces allowed
 tags=python parcele kataster slovenija 
 
-homepage=https://github.com/matjash/SiKataster
+homepage=https://github.com/matjash/si_kataster
 category=Web
 icon=icon.png
 # experimental flag
