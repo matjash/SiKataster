@@ -1,16 +1,20 @@
 from qgis.PyQt.QtWidgets import QWidget,  QLineEdit, QPushButton, QLabel, QCompleter, QHBoxLayout, QVBoxLayout
 from qgis.PyQt.QtCore import QStringListModel, Qt
+
 from qgis.utils import iface
 from qgis.core import QgsProject
 from qgis.core import QgsCoordinateReferenceSystem, QgsVectorLayer, QgsMessageLog, Qgis, QgsAbstractMetadataBase, QgsApplication, QgsTask, QgsMessageLog, QgsFeatureRequest, QgsProcessingFeatureSourceDefinition
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QLineEdit, QCompleter, QPushButton, QSlider, QHBoxLayout, QStackedWidget, QComboBox,QCheckBox, QDoubleSpinBox
 from PyQt5.QtCore import Qt
 import processing
+import keyring
 from .functions_container import (LoadKoTask, 
                                   LoadParcelsTask,
                                   FindParcelTask,
                                   is_wfs_accessible, 
                                   FetchByAreaTask)
+from .si_kataster_esodstvo import (check_esodstvo_credentials, 
+                                   FetchZKPdfTask)
         
 MESSAGE_CATEGORY = 'SiKataster'
 
@@ -83,6 +87,11 @@ class ParcelDialog(QWidget):
         self.load_button.setFixedWidth(80)
         button_layout.addWidget(self.load_button)
 
+        
+        self.izpis_zk_button = QPushButton(self.tr('Izpis iz ZK'))
+        self.izpis_zk_button.setFixedWidth(55)
+        button_layout.addWidget(self.izpis_zk_button)
+
         # "Poišči" button
         self.find_button = QPushButton(self.tr('Poišči'))
         button_layout.addWidget(self.find_button)
@@ -137,6 +146,7 @@ class ParcelDialog(QWidget):
         # Connect signals
         self.find_button.clicked.connect(self.find_parcel)
         self.load_button.clicked.connect(self.load_parcel)
+        self.izpis_zk_button.clicked.connect(self.load_zk_pdf)
         self.ko_id_input.editingFinished.connect(self.load_parcels_for_selected_ko)
         self.search_area_button.clicked.connect(self.fetch_to_layer)
         self.search_mode_slider.valueChanged.connect(self.switch_search_mode)
@@ -311,3 +321,43 @@ class ParcelDialog(QWidget):
                 self.loading_label.setText(self.tr('Potrebno je vnesti K. O. in parcelo'))  
                 self.loading_label.setVisible(True)
 
+    def load_zk_pdf(self):
+        saved_username = keyring.get_password("SiKataster", "esodstvo_username")    
+        saved_password = keyring.get_password("SiKataster", "esodstvo_password")
+        ko_id = self.ko_id_input.text().split(" - ")[0]
+        parcela = self.parcela_input.text()
+    
+        esodstvo_accessibility = True ## Ali je stran esodstva dostopna.
+        user_credentials = check_esodstvo_credentials(saved_username, saved_password) ## Ali uporabnišško ie in geslo pravilno
+
+
+        if not esodstvo_accessibility:
+            self.loading_label.setText(self.tr('E-sodstvo ni dostopno.'))
+            self.loading_label.setVisible(True)
+            self.loading_label.setStyleSheet("color: red;")
+
+        while not user_credentials:
+            if saved_username is None or saved_password is None or saved_username == "" or saved_password == "" or user_credentials is False:
+                self.loading_label.setText(self.tr('Neveljavno uporabniško ime ali geslo.'))
+                self.loading_label.setVisible(True)
+                self.loading_label.setStyleSheet("color: red;")
+
+                dialog = EsodstvoCredentialsDialog(self)
+                if dialog.exec_() == QtWidgets.QDialog.Accepted:
+                    username, password = dialog.get_credentials()
+                    keyring.set_password("SiKataster", "esodstvo_username", username)
+                    keyring.set_password("SiKataster", "esodstvo_password", password)
+                
+            saved_username = keyring.get_password("SiKataster", "esodstvo_username")
+            saved_password = keyring.get_password("SiKataster", "esodstvo_password")
+
+        self.loading_label.setVisible(False)
+
+        if ko_id and parcela:
+            self.fetch_zk_pdf_task= FetchZKPdfTask(description=self.tr('Prenos pdf iz Zemljiške knjige'),iface=self.iface, loading_label=self.loading_label, ko_id=ko_id, parcela=parcela, username=saved_username, password=saved_password)    
+            QgsApplication.taskManager().addTask(self.fetch_zk_pdf_task)
+        
+        else:
+            self.loading_label.setStyleSheet("color: black;")
+            self.loading_label.setText(self.tr('Potrebno je vnesti K. O. in parcelo')) 
+            self.loading_label.setVisible(True)

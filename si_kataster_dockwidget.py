@@ -24,10 +24,17 @@
 import os
 from qgis.PyQt import QtWidgets
 from qgis.PyQt.QtCore import pyqtSignal
+from qgis.PyQt.QtCore import Qt  
 from .si_kataster_search_dialog import ParcelDialog
 from .si_kataster_about_dialog import AboutDialog
 from .si_kataster_nalozi_kn_dialog import NaloziKNDialog
-
+from .si_kataster_esodstvo import EsodstvoCredentialsDialog
+import subprocess
+try:
+    import keyring
+except ImportError: 
+    subprocess.check_call(['python', '-m', 'pip', 'install', 'keyring']) 
+    import keyring
 
 class SiKatasterDockWidget(QtWidgets.QDockWidget):
     closingPlugin = pyqtSignal()
@@ -39,6 +46,9 @@ class SiKatasterDockWidget(QtWidgets.QDockWidget):
         self.tab_widget = QtWidgets.QTabWidget()
         self.setWidget(self.tab_widget)
 
+        self.tab_widget.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tab_widget.customContextMenuRequested.connect(self.show_context_menu)
+
         self.parcel_tab = ParcelDialog()
         self.tab_widget.addTab(self.parcel_tab, self.tr("Išči po parceli"))
 
@@ -48,8 +58,22 @@ class SiKatasterDockWidget(QtWidgets.QDockWidget):
         self.about_tab = AboutDialog()
         self.tab_widget.addTab(self.about_tab, self.tr("O vtičniku"))
 
-  
+    
+    def show_context_menu(self, point):
+        menu = QtWidgets.QMenu(self)
 
+        action1 = menu.addAction("Nastavitve dostopa do e-sodstva")
+
+        action = menu.exec_(self.tab_widget.mapToGlobal(point))
+
+        if action == action1:
+            dialog = EsodstvoCredentialsDialog(self)
+            if dialog.exec_() == QtWidgets.QDialog.Accepted:
+                username, password = dialog.get_credentials()
+                keyring.set_password("SiKataster", "esodstvo_username", username)
+                keyring.set_password("SiKataster", "esodstvo_password", password)
+                #feedback
+                
 
     def closeEvent(self, event):
         self.closingPlugin.emit()
