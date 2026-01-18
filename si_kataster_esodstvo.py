@@ -1,13 +1,15 @@
 from qgis.PyQt import QtWidgets
 from qgis.core import QgsTask
 from qgis.core import QgsMessageLog, Qgis
-from qgis.PyQt.QtCore import  QCoreApplication
+from qgis.PyQt.QtCore import QCoreApplication
 
 import keyring
 import os
 import subprocess
 import sys
 
+# Import the web client
+from .si_kataster_2web import EsodstvoWebClient, verify_credentials
 
         
 MESSAGE_CATEGORY = 'SiKataster'
@@ -16,12 +18,15 @@ def tr(message):
     return QCoreApplication.translate('SiKataster', message)
 
 def check_esodstvo_credentials(username, password):
+    """Check if e-Sodstvo credentials are valid"""
     try:
-        # Preveri če je geslo in usernae veljavno na strani esodstvo
-
-
-        return True
+        return verify_credentials(username, password)
     except Exception as e:
+        QgsMessageLog.logMessage(
+            f"Credential check error: {str(e)}", 
+            MESSAGE_CATEGORY, 
+            Qgis.Warning
+        )
         return False
     
 
@@ -62,10 +67,8 @@ class EsodstvoCredentialsDialog(QtWidgets.QDialog):
     def toggle_password_visibility(self, checked):
         self.password_edit.setEchoMode(QtWidgets.QLineEdit.Normal if checked else QtWidgets.QLineEdit.Password)
 
-
     def get_credentials(self):
         return self.username_edit.text(), self.password_edit.text()
-
 
 
 class FetchZKPdfTask(QgsTask):
@@ -80,39 +83,110 @@ class FetchZKPdfTask(QgsTask):
         self.tr = tr
         self.username = username
         self.password = password
-        self.pdf_path = None    
+        self.pdf_path = None
+        self.web_client = None
        
 
     def run(self):
+        """Execute the PDF download task"""
         try:
-            ##tukaj je logika za prenešanje pdf-ja
-
+            QgsMessageLog.logMessage(
+                f"Starting PDF download for KO: {self.ko_id}, Parcela: {self.parcela}",
+                MESSAGE_CATEGORY,
+                Qgis.Info
+            )
             
-
-            #če je pdf uspešno prenešen, vrni True in nastavi self.pdf_path 
-            self.pdf_path = 'path/to/pdf'
+            # Initialize web client with headless mode
+            self.web_client = EsodstvoWebClient(
+                self.username, 
+                self.password,
+                headless=True
+            )
             
-            if self.pdf_path is not None:
-                return True
-            #Če ni uspešno prenešen, vrni False in vzrok težave
-            else:
-                self.exception = self.tr('Težave pri prenešanju PDF')
+            # Login
+            if not self.web_client.login():
+                self.exception = self.tr('Napaka pri prijavi v e-sodstvo')
                 return False
+            
+            QgsMessageLog.logMessage("Login successful", MESSAGE_CATEGORY, Qgis.Info)
+            
+            # Select land registry role
+            if not self.web_client.select_land_registry_role():
+                self.exception = self.tr('Napaka pri izbiri vloge zemljiške knjige')
+                return False
+            
+            QgsMessageLog.logMessage("Role selection successful", MESSAGE_CATEGORY, Qgis.Info)
+            
+            # Fill form with parcel data
+            self.web_client.fill_parcel_form(self.ko_id, self.parcela)
+            
+            QgsMessageLog.logMessage("Form filled", MESSAGE_CATEGORY, Qgis.Info)
+            
+            # Download PDF
+            self.pdf_path = self.web_client.download_pdf()
+            
+            if self.pdf_path and os.path.exists(self.pdf_path):
+                QgsMessageLog.logMessage(
+                    f"PDF downloaded: {self.pdf_path}",
+                    MESSAGE_CATEGORY,
+                    Qgis.Success
+                )
+                return True
+            else:
+                self.exception = self.tr('PDF ni bil prenešen. Preverite podatke o parceli.')
+                return False
+                
         except Exception as e:
-            self.exception = e
+            QgsMessageLog.logMessage(
+                f"Error in run(): {str(e)}",
+                MESSAGE_CATEGORY,
+                Qgis.Critical
+            )
+            self.exception = str(e)
             return False
+        finally:
+            # Clean up web client
+            if self.web_client:
+                self.web_client.close()
         
     def finished(self, result):
-        #Če je pdf uspešno prenešen, odpri pdf
+        """Handle task completion"""
+        # Hide loading label
+        if self.loading_label:
+            self.loading_label.setVisible(False)
+        
         if result:
-            if sys.platform.startswith('darwin'):  # macOS
-                subprocess.call(['open', self.pdf_path])
-            elif os.name == 'nt':  # Windows
-                os.startfile(self.pdf_path)
-            elif os.name == 'posix':  # Linux
-                subprocess.call(['xdg-open', self.pdf_path])
+            # Success - open PDF
+            QgsMessageLog.logMessage(
+                f"Task completed successfully. Opening PDF: {self.pdf_path}",
+                MESSAGE_CATEGORY,
+                Qgis.Success
+            )
             
+            try:
+                if sys.platform.startswith('darwin'):  # macOS
+                    subprocess.call(['open', self.pdf_path])
+                elif os.name == 'nt':  # Windows
+                    os.startfile(self.pdf_path)
+                elif os.name == 'posix':  # Linux
+                    subprocess.call(['xdg-open', self.pdf_path])
+            except Exception as e:
+                QgsMessageLog.logMessage(
+                    f"Error opening PDF: {str(e)}",
+                    MESSAGE_CATEGORY,
+                    Qgis.Warning
+                )
         else:
-            self.loading_label.setStyleSheet("color: red;")
-            self.loading_label.setText(self.tr(f"Error: {self.exception if self.exception else self.tr('Težava pri prenešanju PDFa')}"))   
-            self.loading_label.setVisible(True)
+            # Error - show message
+            error_msg = self.exception if self.exception else self.tr('Težava pri prenešanju PDFa')
+            
+            QgsMessageLog.logMessage(
+                f"Task failed: {error_msg}",
+                MESSAGE_CATEGORY,
+                Qgis.Critical
+            )
+            
+            if self.loading_label:
+                self.loading_label.setStyleSheet("color: red;")
+                self.loading_label.setText(self.tr(f"Napaka: {error_msg}"))
+                self.loading_label.setVisible(True)

@@ -22,6 +22,50 @@
  This script initializes the plugin, making it known to QGIS.
 """
 
+
+
+import pkg_resources
+import subprocess
+from PyQt5.QtWidgets import QMessageBox
+from qgis.utils import iface
+
+def check_and_install_packages():
+    # Define the required packages and their upgrade requirements
+    install_requires = ['keyring', 'selenium']
+
+    # Flag to track if any package was installed or upgraded
+    changes_made = False
+
+    # Install required packages
+    for package in install_requires:
+        if install_package(package):
+            changes_made = True
+
+    # Show restart message if any changes were made
+    if changes_made:
+        show_restart_message()
+
+def install_package(package):
+    changes_made = False
+    try:
+        pkg_resources.get_distribution(package)
+    except pkg_resources.DistributionNotFound:
+        subprocess.check_call(['python', '-m', 'pip', 'install', package])
+        changes_made = True
+    return changes_made
+
+def show_restart_message():
+    msg = QMessageBox()
+    msg.setIcon(QMessageBox.Information)
+    msg.setText("QGIS needs to be restarted for installation changes to take effect.")
+    msg.setWindowTitle("SiKataster")
+    msg.setStandardButtons(QMessageBox.Ok)
+    msg.exec_()
+
+# Check and install packages when the plugin is loaded
+check_and_install_packages()
+
+
 # noinspection PyPep8Naming
 def classFactory(iface):  # pylint: disable=invalid-name
     """Load SiKataster class from file si_kataster.

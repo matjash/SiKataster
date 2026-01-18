@@ -1,11 +1,11 @@
-from qgis.PyQt.QtWidgets import QWidget,  QLineEdit, QPushButton, QLabel, QCompleter, QHBoxLayout, QVBoxLayout
+from qgis.PyQt.QtWidgets import QWidget, QDialog,QVBoxLayout, QLabel, QLineEdit, QCompleter, QPushButton, QSlider, QHBoxLayout, QStackedWidget, QComboBox,QCheckBox, QDoubleSpinBox
 from qgis.PyQt.QtCore import QStringListModel, Qt
 
 from qgis.utils import iface
 from qgis.core import QgsProject
 from qgis.core import QgsCoordinateReferenceSystem, QgsVectorLayer, QgsMessageLog, Qgis, QgsAbstractMetadataBase, QgsApplication, QgsTask, QgsMessageLog, QgsFeatureRequest, QgsProcessingFeatureSourceDefinition
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QLineEdit, QCompleter, QPushButton, QSlider, QHBoxLayout, QStackedWidget, QComboBox,QCheckBox, QDoubleSpinBox
-from PyQt5.QtCore import Qt
+#from PyQt.QtWidgets import QWidget, QVBoxLayout, QLabel, QLineEdit, QCompleter, QPushButton, QSlider, QHBoxLayout, QStackedWidget, QComboBox,QCheckBox, QDoubleSpinBox
+#from PyQt.QtCore import QStringListModel, Qt
 import processing
 import keyring
 from .functions_container import (LoadKoTask, 
@@ -13,7 +13,7 @@ from .functions_container import (LoadKoTask,
                                   FindParcelTask,
                                   is_wfs_accessible, 
                                   FetchByAreaTask)
-from .si_kataster_esodstvo import (check_esodstvo_credentials, 
+from .si_kataster_esodstvo import (check_esodstvo_credentials, EsodstvoCredentialsDialog,
                                    FetchZKPdfTask)
         
 MESSAGE_CATEGORY = 'SiKataster'
@@ -326,7 +326,8 @@ class ParcelDialog(QWidget):
         saved_password = keyring.get_password("SiKataster", "esodstvo_password")
         ko_id = self.ko_id_input.text().split(" - ")[0]
         parcela = self.parcela_input.text()
-    
+      
+        
         esodstvo_accessibility = True ## Ali je stran esodstva dostopna.
         user_credentials = check_esodstvo_credentials(saved_username, saved_password) ## Ali uporabnišško ie in geslo pravilno
 
@@ -336,20 +337,26 @@ class ParcelDialog(QWidget):
             self.loading_label.setVisible(True)
             self.loading_label.setStyleSheet("color: red;")
 
-        while not user_credentials:
-            if saved_username is None or saved_password is None or saved_username == "" or saved_password == "" or user_credentials is False:
-                self.loading_label.setText(self.tr('Neveljavno uporabniško ime ali geslo.'))
-                self.loading_label.setVisible(True)
-                self.loading_label.setStyleSheet("color: red;")
+        while True:
+            if saved_username and saved_password:
+                user_credentials = check_esodstvo_credentials(saved_username, saved_password)
+                if user_credentials:
+                    break
 
-                dialog = EsodstvoCredentialsDialog(self)
-                if dialog.exec_() == QtWidgets.QDialog.Accepted:
-                    username, password = dialog.get_credentials()
-                    keyring.set_password("SiKataster", "esodstvo_username", username)
-                    keyring.set_password("SiKataster", "esodstvo_password", password)
-                
-            saved_username = keyring.get_password("SiKataster", "esodstvo_username")
-            saved_password = keyring.get_password("SiKataster", "esodstvo_password")
+            self.loading_label.setText(self.tr('Neveljavno uporabniško ime ali geslo.'))
+            self.loading_label.setVisible(True)
+            self.loading_label.setStyleSheet("color: red;")
+
+            dialog = EsodstvoCredentialsDialog(self)
+            if dialog.exec_() != QDialog.Accepted:
+                return  # user cancelled → stop
+
+            username, password = dialog.get_credentials()
+            keyring.set_password("SiKataster", "esodstvo_username", username)
+            keyring.set_password("SiKataster", "esodstvo_password", password)
+
+            saved_username = username
+            saved_password = password
 
         self.loading_label.setVisible(False)
 
@@ -361,3 +368,9 @@ class ParcelDialog(QWidget):
             self.loading_label.setStyleSheet("color: black;")
             self.loading_label.setText(self.tr('Potrebno je vnesti K. O. in parcelo')) 
             self.loading_label.setVisible(True)
+
+
+
+
+
+
