@@ -16,7 +16,7 @@ class AboutDialog(QWidget):
 
         # Add text with hyperlinks
         text = """
-        <b>SiKataster</b> je orodje za dostop do podatkov o parcelah v Katastru nepremičnin Geodetske uprave Republike Slovenije (GURS) in Zemljiški knjigi (e-Sodstvo). <br><br> Z desnim klikom nastavimo dostop do e-Sodstva. <br><br>
+        <b>SiKataster</b> je orodje za dostop do podatkov o parcelah v Katastru nepremičnin Geodetske uprave Republike Slovenije (GURS) in Zemljiški knjigi (e-Sodstvo). <br><br> Z desnim klikom kjerkoli v zavihku "Išči po parceli" lahko nastavimo dostop do e-Sodstva. <br><br>
 
         Vtičnik je zasnovan na način, da v metapodatke slojev, ki jih ustvari, zapiše informacije o viru in datumu prevzema podatkov.<br><br>
 

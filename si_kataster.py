@@ -23,12 +23,53 @@
 """
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtWidgets import QAction, QMessageBox
+
+from qgis.core import QgsMessageLog, Qgis
+
+import keyring
 
 from .resources import *
 
 from .si_kataster_dockwidget import SiKatasterDockWidget
 import os.path
+import pkg_resources
+import subprocess
+
+
+def check_and_install_packages():
+    # Define the required packages and their upgrade requirements
+    install_requires = ['keyring', 'selenium']
+
+    # Flag to track if any package was installed or upgraded
+    changes_made = False
+
+    # Install required packages
+    for package in install_requires:
+        if install_package(package):
+            changes_made = True
+
+    # Show restart message if any changes were made
+    if changes_made:
+        show_restart_message()
+
+def install_package(package):
+    changes_made = False
+    try:
+        pkg_resources.get_distribution(package)
+    except pkg_resources.DistributionNotFound:
+        subprocess.check_call(['python', '-m', 'pip', 'install', package])
+        changes_made = True
+    return changes_made
+
+def show_restart_message():
+    msg = QMessageBox()
+    msg.setIcon(QMessageBox.Information)
+    msg.setText(QCoreApplication.translate('SiKataster', 
+        "QGIS mora biti ponovno zagnan, da se spremembe uveljavijo."))
+    msg.setWindowTitle("SiKataster")
+    msg.setStandardButtons(QMessageBox.Ok)
+    msg.exec_()
 
 
 class SiKataster:
@@ -40,7 +81,7 @@ class SiKataster:
             application at run time.
         :type iface: QgsInterface
         """
-
+        check_and_install_packages()
         self.iface = iface
         self.plugin_dir = os.path.dirname(__file__)
 
@@ -62,6 +103,10 @@ class SiKataster:
 
         self.pluginIsActive = False
         self.dockwidget = None
+        
+        self.web_session = None
+        # Initialize web session if credentials exist
+        self._initialize_web_session_if_ready()
 
 
     # noinspection PyMethodMayBeStatic
@@ -171,24 +216,14 @@ class SiKataster:
     def onClosePlugin(self):
         """Cleanup necessary items here when plugin dockwidget is closed"""
 
-        #print "** CLOSING SiKataster"
-
         # disconnects
         self.dockwidget.closingPlugin.disconnect(self.onClosePlugin)
-
-        # remove this statement if dockwidget is to remain
-        # for reuse if plugin is reopened
-        # Commented next statement since it causes QGIS crashe
-        # when closing the docked window:
-        # self.dockwidget = None
 
         self.pluginIsActive = False
 
 
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
-
-        #print "** UNLOAD SiKataster"
 
         for action in self.actions:
             self.iface.removePluginWebMenu(
@@ -197,6 +232,22 @@ class SiKataster:
             self.iface.removeToolBarIcon(action)
         # remove the toolbar
         del self.toolbar
+        
+        # Clean up web session
+        try:
+            from .si_kataster_2web import EsodstvoWebClient
+            EsodstvoWebClient.close_shared_session()
+            QgsMessageLog.logMessage(
+                self.tr("Spletna seja zaprta"),
+                "SiKataster",
+                Qgis.Info
+            )
+        except Exception as e:
+            QgsMessageLog.logMessage(
+                self.tr(f"Napaka pri zapiranju seje: {str(e)}"),
+                "SiKataster",
+                Qgis.Warning
+            )
 
     #--------------------------------------------------------------------------
 
@@ -205,8 +256,6 @@ class SiKataster:
 
         if not self.pluginIsActive:
             self.pluginIsActive = True
-
-            #print "** STARTING SiKataster"
 
             # dockwidget may not exist if:
             #    first run of plugin
@@ -222,3 +271,125 @@ class SiKataster:
             # TODO: fix to allow choice of dock location
             self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.dockwidget)
             self.dockwidget.show()
+
+
+    # --------------------------------------------------------------------------
+    def _initialize_web_session_if_ready(self):
+        """Initialize web session if valid credentials are stored"""
+        try:
+            # Get stored credentials
+            username = keyring.get_password("SiKataster", "esodstvo_username")
+            password = keyring.get_password("SiKataster", "esodstvo_password")
+            
+            if username and password:
+                QgsMessageLog.logMessage(
+                    self.tr("Najdene shranjene poverilnice, inicializacija spletne seje v ozadju..."),
+                    "SiKataster",
+                    Qgis.Info
+                )
+                
+                # Start initialization in a background thread to not block QGIS startup
+                from qgis.core import QgsTask, QgsApplication
+                
+                class InitSessionTask(QgsTask):
+                    def __init__(self, username, password):
+                        super().__init__('Initialize e-Sodstvo session', QgsTask.CanCancel)
+                        self.username = username
+                        self.password = password
+                        self.exception = None
+                    
+                    def run(self):
+                        try:
+                            from .si_kataster_2web import EsodstvoWebClient
+                            
+                            QgsMessageLog.logMessage(
+                                self.tr("Inicializacija ozadja: Ustvarjam spletnega odjemalca..."),
+                                "SiKataster",
+                                Qgis.Info
+                            )
+                            
+                            # This will create and cache the browser session
+                            client = EsodstvoWebClient(
+                                self.username, 
+                                self.password, 
+                                headless=True, 
+                                reuse_session=True
+                            )
+                            
+                            QgsMessageLog.logMessage(
+                                self.tr("Inicializacija ozadja: Prijavljanje..."),
+                                "SiKataster",
+                                Qgis.Info
+                            )
+                            
+                            if not client.login():
+                                self.exception = self.tr("Prijava neuspešna - neveljavne poverilnice")
+                                # Clear invalid credentials
+                                keyring.delete_password("SiKataster", "esodstvo_username")
+                                keyring.delete_password("SiKataster", "esodstvo_password")
+                                return False
+                            
+                            # Check status after login
+                            status = EsodstvoWebClient.get_session_status()
+                            QgsMessageLog.logMessage(
+                                self.tr(f"Inicializacija ozadja: Po prijavi - {status}"),
+                                "SiKataster",
+                                Qgis.Info
+                            )
+                            
+                            QgsMessageLog.logMessage(
+                                self.tr("Inicializacija ozadja: Izbiranje vloge..."),
+                                "SiKataster",
+                                Qgis.Info
+                            )
+                            
+                            if not client.select_land_registry_role():
+                                status = EsodstvoWebClient.get_session_status()
+                                self.exception = self.tr(f"Izbira vloge neuspešna. Status: {status}")
+                                return False
+                            
+                            # Log final status
+                            status = EsodstvoWebClient.get_session_status()
+                            QgsMessageLog.logMessage(
+                                self.tr(f"Inicializacija ozadja: Končano - {status}"),
+                                "SiKataster",
+                                Qgis.Success
+                            )
+                            
+                            # Don't close the client - we want to keep the session
+                            return True
+                        except Exception as e:
+                            import traceback
+                            self.exception = traceback.format_exc()
+                            QgsMessageLog.logMessage(
+                                self.tr(f"Izjema pri inicializaciji ozadja: {self.exception}"),
+                                "SiKataster",
+                                Qgis.Critical
+                            )
+                            return False
+                    
+                    def finished(self, result):
+                        if result:
+                            QgsMessageLog.logMessage(
+                                self.tr("✅ Seja e-sodstva pripravljena - prenosi PDF bodo hitri"),
+                                "SiKataster",
+                                Qgis.Success
+                            )
+                        else:
+                            QgsMessageLog.logMessage(
+                                self.tr(f"⚠️ Inicializacija ozadja neuspešna: {self.exception}. Seja bo ustvarjena ob prvi uporabi."),
+                                "SiKataster",
+                                Qgis.Warning
+                            )
+                
+                # Start the initialization task
+                task = InitSessionTask(username, password)
+                QgsApplication.taskManager().addTask(task)
+                
+        except Exception as e:
+            # Silently fail - session will be created on first use
+            QgsMessageLog.logMessage(
+                self.tr(f"Seja ni mogla biti pred-inicializirana: {str(e)}"),
+                "SiKataster",
+                Qgis.Warning
+            )

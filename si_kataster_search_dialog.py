@@ -1,11 +1,11 @@
-from qgis.PyQt.QtWidgets import QWidget, QDialog,QVBoxLayout, QLabel, QLineEdit, QCompleter, QPushButton, QSlider, QHBoxLayout, QStackedWidget, QComboBox,QCheckBox, QDoubleSpinBox
-from qgis.PyQt.QtCore import QStringListModel, Qt
+from qgis.PyQt.QtWidgets import QWidget, QDialog,QVBoxLayout, QLabel, QLineEdit, QCompleter, QPushButton, QSlider, QHBoxLayout, QStackedWidget, QComboBox,QCheckBox, QDoubleSpinBox, QMenu, QAction
+from qgis.PyQt.QtCore import QStringListModel, Qt, QPoint
+from qgis.PyQt.QtGui import QCursor
 
 from qgis.utils import iface
 from qgis.core import QgsProject
 from qgis.core import QgsCoordinateReferenceSystem, QgsVectorLayer, QgsMessageLog, Qgis, QgsAbstractMetadataBase, QgsApplication, QgsTask, QgsMessageLog, QgsFeatureRequest, QgsProcessingFeatureSourceDefinition
-#from PyQt.QtWidgets import QWidget, QVBoxLayout, QLabel, QLineEdit, QCompleter, QPushButton, QSlider, QHBoxLayout, QStackedWidget, QComboBox,QCheckBox, QDoubleSpinBox
-#from PyQt.QtCore import QStringListModel, Qt
+
 import processing
 import keyring
 from .functions_container import (LoadKoTask, 
@@ -14,7 +14,7 @@ from .functions_container import (LoadKoTask,
                                   is_wfs_accessible, 
                                   FetchByAreaTask)
 from .si_kataster_esodstvo import (check_esodstvo_credentials, EsodstvoCredentialsDialog,
-                                   FetchZKPdfTask)
+                                   FetchZKPdfTask, DownloadFolderDialog)
         
 MESSAGE_CATEGORY = 'SiKataster'
 
@@ -27,6 +27,10 @@ class ParcelDialog(QWidget):
         self.iface = iface
         layout = QVBoxLayout()
         self.setWindowTitle(self.tr("Išči"))
+        
+        # Enable context menu for the whole widget
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.show_context_menu)
 
         # Create a label for the slider
         self.search_mode_label = QLabel(self.tr("Iskanje po parcelah  /  Izbor s presekom sloja"))
@@ -164,6 +168,43 @@ class ParcelDialog(QWidget):
             self.loading_label.setStyleSheet("color: red;")
         else:
             self.load_ko()
+
+    def show_context_menu(self, position):
+        """Show context menu for the entire panel"""
+        menu = QMenu()
+        
+        change_creds_action = QAction(self.tr("Spremeni poverilnice e-sodstva"), self)
+        change_creds_action.triggered.connect(self.change_esodstvo_credentials)
+        menu.addAction(change_creds_action)
+        
+        change_folder_action = QAction(self.tr("Spremeni mapo za prenose"), self)
+        change_folder_action.triggered.connect(self.change_download_folder)
+        menu.addAction(change_folder_action)
+        
+        # Show menu at cursor position
+        menu.exec_(self.mapToGlobal(position))
+
+    def change_download_folder(self):
+        """Open dialog to change download folder"""
+        dialog = DownloadFolderDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            from .si_kataster_2web import get_default_download_folder
+            new_folder = get_default_download_folder()
+            self.loading_label.setText(self.tr(f'Mapa za prenose: {new_folder}'))
+            self.loading_label.setStyleSheet("color: green;")
+            self.loading_label.setVisible(True)
+
+    def show_zk_context_menu(self, position):
+        """Show context menu for ZK button (deprecated - now handled by panel context menu)"""
+        self.show_context_menu(position)
+
+    def change_esodstvo_credentials(self):
+        """Open dialog to change e-Sodstvo credentials"""
+        dialog = EsodstvoCredentialsDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.loading_label.setText(self.tr('Poverilnice posodobljene'))
+            self.loading_label.setStyleSheet("color: green;")
+            self.loading_label.setVisible(True)
 
     def on_layer_selection_change(self):
         if self.current_layer:
@@ -324,53 +365,50 @@ class ParcelDialog(QWidget):
     def load_zk_pdf(self):
         saved_username = keyring.get_password("SiKataster", "esodstvo_username")    
         saved_password = keyring.get_password("SiKataster", "esodstvo_password")
-        ko_id = self.ko_id_input.text().split(" - ")[0]
+        ko_id_text = self.ko_id_input.text()
         parcela = self.parcela_input.text()
       
+        # Extract KO ID if it's in the format "ID - Name"
+        if " - " in ko_id_text:
+            ko_id = ko_id_text.split(" - ")[0]
+        else:
+            ko_id = ko_id_text
         
         esodstvo_accessibility = True ## Ali je stran esodstva dostopna.
-        user_credentials = check_esodstvo_credentials(saved_username, saved_password) ## Ali uporabnišško ie in geslo pravilno
-
 
         if not esodstvo_accessibility:
             self.loading_label.setText(self.tr('E-sodstvo ni dostopno.'))
             self.loading_label.setVisible(True)
             self.loading_label.setStyleSheet("color: red;")
+            return
 
-        while True:
-            if saved_username and saved_password:
-                user_credentials = check_esodstvo_credentials(saved_username, saved_password)
-                if user_credentials:
-                    break
-
-            self.loading_label.setText(self.tr('Neveljavno uporabniško ime ali geslo.'))
+        # Check if credentials exist, if not show dialog
+        if not saved_username or not saved_password:
+            self.loading_label.setText(self.tr('Vnesite poverilnice e-sodstva'))
             self.loading_label.setVisible(True)
-            self.loading_label.setStyleSheet("color: red;")
+            self.loading_label.setStyleSheet("color: orange;")
 
             dialog = EsodstvoCredentialsDialog(self)
             if dialog.exec_() != QDialog.Accepted:
-                return  # user cancelled → stop
+                return  # user cancelled
 
-            username, password = dialog.get_credentials()
-            keyring.set_password("SiKataster", "esodstvo_username", username)
-            keyring.set_password("SiKataster", "esodstvo_password", password)
-
-            saved_username = username
-            saved_password = password
+            saved_username, saved_password = dialog.get_credentials()
 
         self.loading_label.setVisible(False)
 
         if ko_id and parcela:
-            self.fetch_zk_pdf_task= FetchZKPdfTask(description=self.tr('Prenos pdf iz Zemljiške knjige'),iface=self.iface, loading_label=self.loading_label, ko_id=ko_id, parcela=parcela, username=saved_username, password=saved_password)    
+            self.fetch_zk_pdf_task= FetchZKPdfTask(
+                description=self.tr('Prenos pdf iz Zemljiške knjige'),
+                iface=self.iface, 
+                loading_label=self.loading_label, 
+                ko_id=ko_id, 
+                parcela=parcela, 
+                username=saved_username, 
+                password=saved_password
+            )    
             QgsApplication.taskManager().addTask(self.fetch_zk_pdf_task)
         
         else:
             self.loading_label.setStyleSheet("color: black;")
             self.loading_label.setText(self.tr('Potrebno je vnesti K. O. in parcelo')) 
             self.loading_label.setVisible(True)
-
-
-
-
-
-
