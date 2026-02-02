@@ -27,8 +27,6 @@ from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
 from qgis.core import QgsMessageLog, Qgis
 
-import keyring
-
 from .resources import *
 
 from .si_kataster_dockwidget import SiKatasterDockWidget
