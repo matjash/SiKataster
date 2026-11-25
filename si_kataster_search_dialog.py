@@ -23,7 +23,7 @@ SOURCE_WFS, SOURCE_FALLBACK = "wfs", "fallback"
 try:
     VECTOR_FILTER = Qgis.LayerFilter.VectorLayer
 except AttributeError:
-    VECTOR_FILTER = QgsMapLayerProxyModel.VectorLayer
+    VECTOR_FILTER = QgsMapLayerProxyModel.Filter.VectorLayer
 
 
 def short(text, limit=300):

@@ -15,7 +15,7 @@ from . import kataster
 try:
     POLYGON_FILTER = Qgis.LayerFilter.PolygonLayer
 except AttributeError:
-    POLYGON_FILTER = QgsMapLayerProxyModel.PolygonLayer
+    POLYGON_FILTER = QgsMapLayerProxyModel.Filter.PolygonLayer
 
 
 def _wrapping_label(text=""):

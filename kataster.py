@@ -369,7 +369,7 @@ def intersect_layer(layer, geom, ko_field=None, parcel_field=None):
 def parcel_numbers_layer(layer, ko_field, parcel_field, ko_id):
     req = QgsFeatureRequest(QgsExpression(_equality(layer, ko_field, ko_id, number=True)))
     flags = getattr(Qgis, "FeatureRequestFlag", None)
-    req.setFlags(flags.NoGeometry if flags else QgsFeatureRequest.NoGeometry)
+    req.setFlags(flags.NoGeometry if flags else QgsFeatureRequest.Flag.NoGeometry)
     req.setSubsetOfAttributes([parcel_field], layer.fields())
     return sorted({str(f[parcel_field]) for f in layer.getFeatures(req)}, key=parcel_sort_key)
 
