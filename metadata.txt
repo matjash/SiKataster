@@ -6,7 +6,6 @@
 name=SiKataster
 qgisMinimumVersion=3.18
 qgisMaximumVersion=4.99
-supportsQt6=True
 description=EN: SiKataster is a tool for accessing cadastral parcel data from the Real Estate Cadastre of the Surveying and Mapping Authority of the Republic of Slovenia (GURS).
         The plugin is designed to record information about the source and the date of data acquisition into the metadata of the layers it creates.
         The data and web service are provided by GURS.
