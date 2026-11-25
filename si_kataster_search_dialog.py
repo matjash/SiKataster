@@ -11,14 +11,13 @@ from qgis.PyQt.QtWidgets import (
     QCheckBox, QCompleter, QDoubleSpinBox, QHBoxLayout, QLabel, QLineEdit, QMenu, QPushButton, QSizePolicy, QSlider,
     QStackedWidget, QToolButton, QVBoxLayout, QWidget,
 )
-from qgis.core import Qgis, QgsApplication, QgsMapLayerProxyModel, QgsProject, QgsSettings, QgsTask
+from qgis.core import Qgis, QgsApplication, QgsMapLayerProxyModel, QgsProject, QgsTask
 from qgis.gui import QgsMapLayerComboBox
 from qgis.utils import iface
 
 from . import kataster
 from .kataster import log
 
-KEY_SOURCE = "SiKataster/search_source"
 SOURCE_WFS, SOURCE_FALLBACK = "wfs", "fallback"
 
 try:
@@ -76,7 +75,7 @@ class ParcelDialog(QWidget):
         layout = QVBoxLayout(self)
 
         # --- source of the search: a button with a menu, top right ----------------
-        self._source = QgsSettings().value(KEY_SOURCE, SOURCE_WFS)      # remembered between sessions
+        self._source = SOURCE_WFS           # every new start begins with GURS WFS (not remembered)
         self.source_button = QToolButton()
         self.source_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.source_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
@@ -242,8 +241,8 @@ class ParcelDialog(QWidget):
     def _refresh_sources(self):
         """Button text = the source in use. The fallback layer can be the source only while it is set."""
         own = kataster.fallback_layer()
-        if own is None or self._source not in (SOURCE_WFS, SOURCE_FALLBACK):
-            self._source = SOURCE_WFS       # only for now - the saved choice is kept
+        if own is None:
+            self._source = SOURCE_WFS
         self.source_button.setText(own[0].name() if self._source == SOURCE_FALLBACK else self.tr("GURS WFS"))
 
     def _fill_source_menu(self):
@@ -263,7 +262,6 @@ class ParcelDialog(QWidget):
         if source == self._source:
             return
         self._source = source
-        QgsSettings().setValue(KEY_SOURCE, source)
         self._refresh_sources()
         self._parcels_for = None            # parcel suggestions belong to the other source
         if self.ko_id_input.text().strip():

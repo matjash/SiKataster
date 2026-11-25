@@ -28,7 +28,7 @@ repository=https://github.com/matjash/SiKataster
 
 hasProcessingProvider=no
 # Uncomment the following line and add your changelog:
-# changelog=0.6 Zanesljivejši dostop do GURS WFS, rezervni sloj parcel v zavihku Nastavitve, združljivost s QGIS 4
+# changelog=0.6 Zanesljivejši dostop do GURS WFS, rezervni sloj parcel v zavihku Nastavitve, združljivost s QGIS 4, sloja »Naloži KN« se ustvarita neposredno (brez QLR)
             0.5 Optimizirano delovanje, dodane funkcije naloži KN in izbor po območju
             0.4 first release
 

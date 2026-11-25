@@ -481,6 +481,20 @@ def fallback_layer():
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
+def source_metadata(title, abstract, url, link_type):
+    """Layer metadata with the source and the time of access; {} in abstract = date and time."""
+    now = datetime.now()
+    md = QgsLayerMetadata()
+    md.setTitle(title)
+    md.setAbstract(abstract.replace("{}", f"{now:%d. %m. %Y %H:%M}", 1))
+    md.addHistoryItem(str({"timestamp": now.isoformat(), "process": "prevzem sloja", "title": title, "source": url}))
+    if url:
+        link = QgsAbstractMetadataBase.Link("Vir podatkov", link_type, url)
+        link.description = f"Dostop: {now}"
+        md.addLink(link)
+    return md
+
+
 def to_memory_layer(result, name):
     """Copy the result into a temporary layer; source and time of access go into its metadata."""
     geoms = [f.geometry() for f in result.features if f.hasGeometry()]
@@ -499,18 +513,61 @@ def to_memory_layer(result, name):
     layer.dataProvider().addFeatures(feats)
     layer.updateExtents()
 
-    now = datetime.now()
-    md = QgsLayerMetadata()
-    md.setTitle(name)
-    md.setAbstract(f"Pridobljeno {now:%d. %m. %Y %H:%M}, vir: {result.label}.")
-    md.addHistoryItem(str({"timestamp": now.isoformat(), "process": "prevzem sloja", "title": name,
-                           "source": result.url}))
-    if result.url:
-        link = QgsAbstractMetadataBase.Link("Vir podatkov", result.link_type, result.url)
-        link.description = f"Dostop: {now}"
-        md.addLink(link)
-    layer.setMetadata(md)
+    layer.setMetadata(source_metadata(name, "Pridobljeno {}, vir: " + result.label + ".", result.url, result.link_type))
     return layer
+
+
+# ---------------------------------------------------------------------------
+# 'Naloži KN': live GURS WFS layers for the whole country, in one group
+# ---------------------------------------------------------------------------
+KN_GROUP = "Kataster nepremičnin"
+KN_LAYERS = [                           # (WFS type, layer name, style file) - top to bottom in the group
+    (WFS_KO, "Katastrske občine", "katastrske_obcine.qml"),
+    (WFS_PARCELS, "Parcele", "parcele.qml"),
+]
+
+
+def wfs_layer_uri(type_name):
+    return (f"pagingEnabled='true' pageSize='{WFS_MAX}' preferCoordinatesForWfsT11='false' "
+            f"restrictToRequestBBOX='1' srsname='EPSG:3794' typename='{type_name}' url='{WFS_URL}' version='2.0.0'")
+
+
+def _kn_layer_in_project(type_name):
+    for layer in QgsProject.instance().mapLayers().values():
+        source = layer.source()
+        if layer.providerType() == "WFS" and WFS_URL in source and f"typename='{type_name}'" in source:
+            return layer
+    return None
+
+
+def load_kn_layers():
+    """Add the K.O. and parcel WFS layers to the group 'Kataster nepremičnin' (main thread only).
+    Layers already in the project are left alone. Returns (added names, names already there);
+    IOError if a layer cannot be opened - then nothing is added."""
+    added, present, new_layers = [], [], []
+    for type_name, name, style in KN_LAYERS:
+        if _kn_layer_in_project(type_name) is not None:
+            present.append(name)
+            continue
+        layer = QgsVectorLayer(wfs_layer_uri(type_name), name, "WFS")
+        if not layer.isValid():
+            reason = " ".join(layer.error().summary().split())
+            raise IOError(f"Sloja »{name}« ni mogoče naložiti iz GURS WFS." + (f" {reason}" if reason else ""))
+        message, ok = layer.loadNamedStyle(str(plugin_path("styles") / style))
+        if not ok:
+            log(f"Sloga {style} ni mogoče uporabiti: {message}", Qgis.MessageLevel.Warning)
+        layer.setMetadata(source_metadata(name, "Sloj dodan {}, vir: GURS WFS (podatki se berejo sproti).",
+                                          layer.publicSource(), "OGC:WFS"))
+        new_layers.append(layer)
+        added.append(name)
+    if new_layers:
+        project = QgsProject.instance()
+        root = project.layerTreeRoot()
+        group = root.findGroup(KN_GROUP) or root.insertGroup(0, KN_GROUP)
+        for layer in new_layers:
+            project.addMapLayer(layer, False)
+            group.addLayer(layer)
+    return added, present
 
 
 def zoom_and_flash(canvas, result):
